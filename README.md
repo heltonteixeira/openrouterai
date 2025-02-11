@@ -4,6 +4,7 @@
 [![Version](https://img.shields.io/badge/version-2.0.3-blue)](CHANGELOG.md)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-brightgreen)](LICENSE)
+[![smithery badge](https://smithery.ai/badge/@mcpserver/openrouterai)](https://smithery.ai/server/@mcpserver/openrouterai)
 
 A Model Context Protocol (MCP) server providing seamless integration with OpenRouter.ai's diverse model ecosystem. Access various AI models through a unified, type-safe interface with built-in caching, rate limiting, and error handling.
 
@@ -28,6 +29,15 @@ A Model Context Protocol (MCP) server providing seamless integration with OpenRo
 
 ## Installation
 
+### Installing via Smithery
+
+To install OpenRouter MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@mcpserver/openrouterai):
+
+```bash
+npx -y @smithery/cli install @mcpserver/openrouterai --client claude
+```
+
+### Manual Installation
 ```bash
 npm install @mcpservers/openrouterai
 ```
