@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-03-27
+### Added
+- Unified ToolResult response format for all tool handlers
+- Structured error messages with "Error: " prefix consistency
+- Comprehensive error handling documentation in README
+
+### Changed
+- Updated all tool handlers to use new response format
+- Improved error messages with contextual information
+- Refactored core error handling infrastructure
+
+### Fixed
+- Removed residual JSON-RPC error code references
+- Standardized success/error response structures
+
+
 ## [2.1.0] - 2025-02-10
 ### Added
 - Conversation context support
@@ -77,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Update license to Apache 2.0
 
+[2.2.0]: https://github.com/mcpservers/openrouterai/compare/v2.1.0...v2.2.0
 [2.0.2]: https://github.com/mcpservers/openrouterai/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/mcpservers/openrouterai/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/mcpservers/openrouterai/compare/v1.0.0...v2.0.0

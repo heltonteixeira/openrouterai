@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions.js';
+import { ToolResult } from '../types.js'; // Import the unified type
 
 // Maximum context tokens (matches tool-handlers.ts)
 const MAX_CONTEXT_TOKENS = 200000;
@@ -18,7 +19,7 @@ function estimateTokenCount(text: string): number {
 
 // Truncate messages to fit within the context window
 function truncateMessagesToFit(
-  messages: ChatCompletionMessageParam[], 
+  messages: ChatCompletionMessageParam[],
   maxTokens: number
 ): ChatCompletionMessageParam[] {
   const truncated: ChatCompletionMessageParam[] = [];
@@ -32,7 +33,14 @@ function truncateMessagesToFit(
 
   // Add messages from the end, respecting the token limit
   for (let i = messages.length - 1; i >= 0; i--) {
-    const messageTokens = estimateTokenCount(messages[i].content as string);
+    // Skip system message if already added
+    if (i === 0 && messages[0]?.role === 'system') continue;
+
+    const messageContent = messages[i].content;
+    // Handle potential null/undefined content safely
+    const contentString = typeof messageContent === 'string' ? messageContent : '';
+    const messageTokens = estimateTokenCount(contentString);
+
     if (currentTokenCount + messageTokens > maxTokens) break;
 
     truncated.unshift(messages[i]);
@@ -42,37 +50,40 @@ function truncateMessagesToFit(
   return truncated;
 }
 
+// Update function signature to return Promise<ToolResult>
 export async function handleChatCompletion(
   request: { params: { arguments: ChatCompletionToolRequest } },
   openai: OpenAI,
   defaultModel?: string
-) {
+): Promise<ToolResult> {
   const args = request.params.arguments;
-  
+
   // Validate model selection
   const model = args.model || defaultModel;
   if (!model) {
     return {
+      isError: true, // Ensure isError is present
       content: [
         {
           type: 'text',
-          text: 'No model specified and no default model configured in MCP settings. Please specify a model or set OPENROUTER_DEFAULT_MODEL in the MCP configuration.',
+          // Add "Error: " prefix
+          text: 'Error: No model specified and no default model configured in MCP settings. Please specify a model or set OPENROUTER_DEFAULT_MODEL in the MCP configuration.',
         },
       ],
-      isError: true,
     };
   }
 
   // Validate message array
-  if (args.messages.length === 0) {
+  if (!args.messages || args.messages.length === 0) { // Add check for undefined/null messages
     return {
+      isError: true, // Ensure isError is present
       content: [
         {
           type: 'text',
-          text: 'Messages array cannot be empty. At least one message is required.',
+          // Add "Error: " prefix
+          text: 'Error: Messages array cannot be empty. At least one message is required.',
         },
       ],
-      isError: true,
     };
   }
 
@@ -107,7 +118,9 @@ export async function handleChatCompletion(
       }
     };
 
+    // Add isError: false to successful return
     return {
+      isError: false,
       content: [
         {
           type: 'text',
@@ -116,17 +129,31 @@ export async function handleChatCompletion(
       ],
     };
   } catch (error) {
+    console.error('Error during chat completion:', error); // Log the error
+    // Handle known and unknown errors, always return ToolResult
     if (error instanceof Error) {
       return {
+        isError: true,
         content: [
           {
             type: 'text',
-            text: `OpenRouter API error: ${error.message}`,
+            // Add "Error: " prefix
+            text: `Error: OpenRouter API error: ${error.message}`,
           },
         ],
+      };
+    } else {
+      // Handle unknown errors
+      return {
         isError: true,
+        content: [
+          {
+            type: 'text',
+            text: 'Error: An unknown error occurred during chat completion.',
+          },
+        ],
       };
     }
-    throw error;
+    // DO NOT throw error;
   }
 }

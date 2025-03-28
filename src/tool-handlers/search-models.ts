@@ -1,5 +1,6 @@
 import { ModelCache, OpenRouterModel } from '../model-cache.js';
 import { OpenRouterAPIClient } from '../openrouter-api.js';
+import { ToolResult } from '../types.js'; // Import the unified type
 
 export interface SearchModelsToolRequest {
   query?: string;
@@ -17,11 +18,12 @@ export interface SearchModelsToolRequest {
   limit?: number;
 }
 
+// Update function signature to return Promise<ToolResult>
 export async function handleSearchModels(
   request: { params: { arguments: SearchModelsToolRequest } },
   apiClient: OpenRouterAPIClient,
   modelCache: ModelCache
-) {
+): Promise<ToolResult> {
   const args = request.params.arguments;
 
   try {
@@ -34,32 +36,17 @@ export async function handleSearchModels(
       }
     }
 
+    // Simplify the "Failed to fetch models" error return
     if (!models) {
       return {
+        isError: true, // Ensure isError is present
         content: [
           {
             type: 'text',
-            text: JSON.stringify({
-              error: {
-                code: 'fetch_failed',
-                message: 'Failed to fetch models. Please try again.',
-                details: {
-                  applied_filters: {
-                    query: args.query,
-                    provider: args.provider,
-                    minContextLength: args.minContextLength,
-                    maxContextLength: args.maxContextLength,
-                    maxPromptPrice: args.maxPromptPrice,
-                    maxCompletionPrice: args.maxCompletionPrice,
-                    capabilities: args.capabilities,
-                    limit: args.limit
-                  }
-                }
-              }
-            }, null, 2),
+            // Use simple error string
+            text: 'Error: Failed to fetch models. Please try again.',
           },
         ],
-        isError: true,
       };
     }
 
@@ -69,7 +56,7 @@ export async function handleSearchModels(
         // Text search
         if (args.query) {
           const searchTerm = args.query.toLowerCase();
-          const matchesQuery = 
+          const matchesQuery =
             model.id.toLowerCase().includes(searchTerm) ||
             (model.name && model.name.toLowerCase().includes(searchTerm)) ||
             (model.description && model.description.toLowerCase().includes(searchTerm));
@@ -140,7 +127,9 @@ export async function handleSearchModels(
       }
     };
 
+    // Add isError: false to successful return
     return {
+      isError: false,
       content: [
         {
           type: 'text',
@@ -149,17 +138,31 @@ export async function handleSearchModels(
       ],
     };
   } catch (error) {
+    console.error('Error during model search:', error); // Log the error
+    // Handle known and unknown errors, always return ToolResult
     if (error instanceof Error) {
       return {
+        isError: true,
         content: [
           {
             type: 'text',
-            text: `Failed to search models: ${error.message}`,
+            // Add "Error: " prefix
+            text: `Error: Failed to search models: ${error.message}`,
           },
         ],
+      };
+    } else {
+      // Handle unknown errors
+      return {
         isError: true,
+        content: [
+          {
+            type: 'text',
+            text: 'Error: An unknown error occurred during model search.',
+          },
+        ],
       };
     }
-    throw error;
+    // DO NOT throw error;
   }
 }

@@ -1,7 +1,7 @@
 # OpenRouter MCP Server
 
 [![MCP Server](https://img.shields.io/badge/MCP-Server-green)](https://github.com/heltonteixeira/openrouterai)
-[![Version](https://img.shields.io/badge/version-2.0.3-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue)](CHANGELOG.md)
 [![TypeScript](https://img.shields.io/badge/language-TypeScript-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-brightgreen)](LICENSE)
 
@@ -21,15 +21,14 @@ A Model Context Protocol (MCP) server providing seamless integration with OpenRo
   - Automatic rate limit management
   - Exponential backoff for failed requests
 
-- **Robust Error Handling**
-  - Detailed error messages with context
-  - Rate limit detection and recovery
-  - Network timeout handling with retries
-
+- **Unified Response Format**
+  - Consistent `ToolResult` structure for all responses
+  - Clear error identification with `isError` flag
+  - Structured error messages with context
 ## Installation
 
 ```bash
-npm install @mcpservers/openrouterai
+pnpm install @mcpservers/openrouterai
 ```
 
 ## Configuration
@@ -38,6 +37,12 @@ npm install @mcpservers/openrouterai
 
 1. Get your OpenRouter API key from [OpenRouter Keys](https://openrouter.ai/keys)
 2. Choose a default model (optional)
+
+### Environment Variables
+```env
+OPENROUTER_API_KEY=your-api-key-here
+OPENROUTER_DEFAULT_MODEL=optional-default-model
+```
 
 ### Setup
 
@@ -58,43 +63,80 @@ Add to your MCP settings configuration file (`cline_mcp_settings.json` or `claud
 }
 ```
 
+## Response Format
+
+All tools return responses in a standardized structure:
+
+```typescript
+interface ToolResult {
+  isError: boolean;
+  content: Array<{
+    type: "text";
+    text: string; // JSON string or error message
+  }>;
+}
+```
+
+**Success Example:**
+```json
+{
+  "isError": false,
+  "content": [{
+    "type": "text",
+    "text": "{\"id\": \"gen-123\", ...}"
+  }]
+}
+```
+
+**Error Example:**
+```json
+{
+  "isError": true,
+  "content": [{
+    "type": "text",
+    "text": "Error: Model validation failed - 'invalid-model' not found"
+  }]
+}
+```
+
 ## Available Tools
 
 ### chat_completion
+
 Send messages to OpenRouter.ai models:
+
 ```typescript
-{
-  model?: string;          // Optional if default model is set
-  messages: {
-    role: "system" | "user" | "assistant";
-    content: string;
-  }[];
-  temperature?: number;    // Optional (0-2), defaults to 1.0
+interface ChatCompletionRequest {
+  model?: string;
+  messages: Array<{role: "user"|"system"|"assistant", content: string}>;
+  temperature?: number; // 0-2
 }
+
+// Response: ToolResult with chat completion data or error
 ```
 
 ### search_models
+
 Search and filter available models:
+
 ```typescript
-{
-  query?: string;          // Search in name/description
-  provider?: string;       // Filter by provider
+interface ModelSearchRequest {
+  query?: string;
+  provider?: string;
   minContextLength?: number;
-  maxContextLength?: number;
-  maxPromptPrice?: number;
-  maxCompletionPrice?: number;
   capabilities?: {
-    functions?: boolean;   // Function calling support
-    tools?: boolean;       // Tool use support
-    vision?: boolean;      // Image processing support
-    json_mode?: boolean;   // JSON mode support
+    functions?: boolean;
+    vision?: boolean;
   };
-  limit?: number;          // Default: 10, max: 50
 }
+
+// Response: ToolResult with model list or error
 ```
 
 ### get_model_info
+
 Get detailed information about a specific model:
+
 ```typescript
 {
   model: string;           // Model identifier
@@ -102,29 +144,55 @@ Get detailed information about a specific model:
 ```
 
 ### validate_model
+
 Check if a model ID is valid:
+
 ```typescript
-{
-  model: string;           // Model identifier to validate
+interface ModelValidationRequest {
+  model: string;
 }
+
+// Response: 
+// Success: { isError: false, valid: true }
+// Error: { isError: true, error: "Model not found" }
 ```
-
-## Rate Limiting
-
-The server implements intelligent rate limit handling:
-- Tracks remaining requests through response headers
-- Automatically waits when rate limits are reached
-- Implements exponential backoff for failed requests
-- Provides clear error messages for rate limit issues
 
 ## Error Handling
 
-The server uses `McpError` for MCP-specific errors with clear messages:
-- Invalid model errors
-- API rate limiting
-- Authentication issues
-- Network errors
-- Invalid parameter errors
+The server provides structured errors with contextual information:
+
+```typescript
+// Error response structure
+{
+  isError: true,
+  content: [{
+    type: "text",
+    text: "Error: [Category] - Detailed message"
+  }]
+}
+```
+
+**Common Error Categories:**
+- `Validation Error`: Invalid input parameters
+- `API Error`: OpenRouter API communication issues
+- `Rate Limit`: Request throttling detection
+- `Internal Error`: Server-side processing failures
+
+**Handling Responses:**
+```typescript
+async function handleResponse(result: ToolResult) {
+  if (result.isError) {
+    const errorMessage = result.content[0].text;
+    if (errorMessage.startsWith('Error: Rate Limit')) {
+      // Handle rate limiting
+    }
+    // Other error handling
+  } else {
+    const data = JSON.parse(result.content[0].text);
+    // Process successful response
+  }
+}
+```
 
 ## Development
 
@@ -135,9 +203,22 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed information about:
 - Error handling guidelines
 - Tool usage examples
 
-## Changelog
+```bash
+# Install dependencies
+pnpm install
 
-See [CHANGELOG.md](CHANGELOG.md) for version history and migration guides.
+# Build project
+pnpm run build
+
+# Run tests
+pnpm test
+```
+
+## Changelog
+See [CHANGELOG.md](./CHANGELOG.md) for recent updates including:
+- Unified response format implementation
+- Enhanced error handling system
+- Type-safe interface improvements
 
 ## License
 
