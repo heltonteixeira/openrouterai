@@ -9,6 +9,18 @@ export interface ChatCompletionToolRequest {
   model?: string;
   messages: ChatCompletionMessageParam[];
   temperature?: number;
+  max_tokens?: number;                  // Add max_tokens parameter
+  provider?: {                         // Add provider configuration
+      // Phase 1
+      quantizations?: string[];        // For quality filtering
+      ignore?: string[];               // Block specific providers
+      // Phase 2
+      sort?: "price" | "throughput" | "latency"; // Sort providers
+      order?: string[];                // Prioritized list of provider IDs
+      require_parameters?: boolean;    // Only use providers supporting all params
+      data_collection?: "allow" | "deny"; // Allow/deny data collection
+      allow_fallbacks?: boolean;       // Control fallback behavior
+  }
 }
 
 // Utility function to estimate token count (simplified)
@@ -54,9 +66,61 @@ function truncateMessagesToFit(
 export async function handleChatCompletion(
   request: { params: { arguments: ChatCompletionToolRequest } },
   openai: OpenAI,
-  defaultModel?: string
+  defaultModel?: string,
+  defaultMaxTokens?: string, // Note: Comes as string from env var
+  defaultQuantizations?: string[],
+  defaultIgnoredProviders?: string[],
+  // Phase 2 Defaults
+  defaultSort?: "price" | "throughput" | "latency",
+  defaultOrder?: string[],
+  defaultRequireParameters?: boolean,
+  defaultDataCollection?: "allow" | "deny",
+  defaultAllowFallbacks?: boolean
 ): Promise<ToolResult> {
   const args = request.params.arguments;
+
+  // Determine effective max_tokens
+  const maxTokens = args.max_tokens ?? (defaultMaxTokens ? parseInt(defaultMaxTokens, 10) : undefined);
+  if (maxTokens !== undefined && isNaN(maxTokens)) {
+      // Handle potential parsing error if defaultMaxTokens is not a valid number string
+      console.warn(`Invalid OPENROUTER_MAX_TOKENS value: ${defaultMaxTokens}. Ignoring.`);
+      // Potentially return an error ToolResult here if strict validation is desired
+  }
+
+  // Determine effective provider config (Phase 1 & 2)
+  const providerArgs = args.provider ?? {};
+  const providerConfig: {
+      quantizations?: string[];
+      ignore?: string[];
+      sort?: "price" | "throughput" | "latency";
+      order?: string[];
+      require_parameters?: boolean;
+      data_collection?: "allow" | "deny";
+      allow_fallbacks?: boolean;
+  } = {};
+
+  // Merge Phase 1
+  const effectiveQuantizations = providerArgs.quantizations ?? defaultQuantizations;
+  const effectiveIgnore = providerArgs.ignore ?? defaultIgnoredProviders;
+  if (effectiveQuantizations && effectiveQuantizations.length > 0) {
+      providerConfig.quantizations = effectiveQuantizations;
+  }
+  if (effectiveIgnore && effectiveIgnore.length > 0) {
+      providerConfig.ignore = effectiveIgnore;
+  }
+
+  // Merge Phase 2
+  const effectiveSort = providerArgs.sort ?? defaultSort;
+  const effectiveOrder = providerArgs.order ?? defaultOrder;
+  const effectiveRequireParameters = providerArgs.require_parameters ?? defaultRequireParameters;
+  const effectiveDataCollection = providerArgs.data_collection ?? defaultDataCollection;
+  const effectiveAllowFallbacks = providerArgs.allow_fallbacks ?? defaultAllowFallbacks;
+
+  if (effectiveSort) providerConfig.sort = effectiveSort;
+  if (effectiveOrder && effectiveOrder.length > 0) providerConfig.order = effectiveOrder;
+  if (effectiveRequireParameters !== undefined) providerConfig.require_parameters = effectiveRequireParameters;
+  if (effectiveDataCollection) providerConfig.data_collection = effectiveDataCollection;
+  if (effectiveAllowFallbacks !== undefined) providerConfig.allow_fallbacks = effectiveAllowFallbacks;
 
   // Validate model selection
   const model = args.model || defaultModel;
@@ -91,11 +155,20 @@ export async function handleChatCompletion(
     // Truncate messages to fit within context window
     const truncatedMessages = truncateMessagesToFit(args.messages, MAX_CONTEXT_TOKENS);
 
-    const completion = await openai.chat.completions.create({
-      model,
+    const completionRequest: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
+      model, // Use the validated model
       messages: truncatedMessages,
       temperature: args.temperature ?? 1,
-    });
+      // Add max_tokens if defined and valid
+      ...(maxTokens !== undefined && !isNaN(maxTokens) && { max_tokens: maxTokens }),
+      // Add provider config if it has keys (now includes Phase 2)
+      ...(Object.keys(providerConfig).length > 0 && { provider: providerConfig }),
+    };
+
+    // Log the request being sent (optional, for debugging)
+    // console.log("Sending request to OpenRouter:", JSON.stringify(completionRequest, null, 2));
+
+    const completion = await openai.chat.completions.create(completionRequest);
 
     // Format response to match OpenRouter schema
     const response = {

@@ -2,8 +2,10 @@
 
 /ref/
 /docs/
-/project.txt
-.cline*
+/sourcecode.*
+.docs/
+.roo*
+.roo/*
 
 # dependencies
 /node_modules

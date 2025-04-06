@@ -21,16 +21,43 @@ export class ToolHandlers {
   private modelCache: ModelCache;
   private apiClient: OpenRouterAPIClient;
   private defaultModel?: string;
+  private defaultMaxTokens?: string;
+  private defaultQuantizations?: string[];
+  private defaultIgnoredProviders?: string[];
+  // Phase 2 Defaults
+  private readonly defaultProviderSort?: "price" | "throughput" | "latency";
+  private readonly defaultProviderOrder?: string[];
+  private readonly defaultProviderRequireParameters?: boolean;
+  private readonly defaultProviderDataCollection?: "allow" | "deny";
+  private readonly defaultProviderAllowFallbacks?: boolean;
 
   constructor(
     server: Server,
     apiKey: string,
-    defaultModel?: string
+    defaultModel?: string,
+    defaultMaxTokens?: string,
+    defaultQuantizations?: string[],
+    defaultIgnoredProviders?: string[],
+    // Phase 2 Defaults
+    defaultProviderSort?: "price" | "throughput" | "latency",
+    defaultProviderOrder?: string[],
+    defaultProviderRequireParameters?: boolean,
+    defaultProviderDataCollection?: "allow" | "deny",
+    defaultProviderAllowFallbacks?: boolean
   ) {
     this.server = server;
     this.modelCache = ModelCache.getInstance();
     this.apiClient = new OpenRouterAPIClient(apiKey);
     this.defaultModel = defaultModel;
+    this.defaultMaxTokens = defaultMaxTokens;
+    this.defaultQuantizations = defaultQuantizations;
+    this.defaultIgnoredProviders = defaultIgnoredProviders;
+    // Phase 2 Defaults
+    this.defaultProviderSort = defaultProviderSort;
+    this.defaultProviderOrder = defaultProviderOrder;
+    this.defaultProviderRequireParameters = defaultProviderRequireParameters;
+    this.defaultProviderDataCollection = defaultProviderDataCollection;
+    this.defaultProviderAllowFallbacks = defaultProviderAllowFallbacks;
 
     this.openai = new OpenAI({
       apiKey: apiKey,
@@ -49,17 +76,17 @@ export class ToolHandlers {
       tools: [
         {
           name: 'chat_completion',
-          description: 'Send a message to OpenRouter.ai and get a response',
+          description: 'Sends conversational context (messages) to OpenRouter.ai for completion using a specified model. Use this for dialogue, text generation, or instruction-following tasks. Supports advanced provider routing and parameter overrides. Returns the generated text response.',
           inputSchema: {
             type: 'object',
             properties: {
               model: {
                 type: 'string',
-                description: 'The model to use (e.g., "google/gemini-2.0-flash-thinking-exp:free", "undi95/toppy-m-7b:free"). If not provided, uses the default model if set.',
+                description: '(Optional) The specific OpenRouter model ID (e.g., "google/gemini-pro") to use for this completion request. If omitted, the server\'s configured default model will be used.',
               },
               messages: {
                 type: 'array',
-                description: 'An array of conversation messages with roles and content',
+                description: '(Required) An ordered array of message objects representing the conversation history. Each object must include `role` ("system", "user", or "assistant") and `content` (the text of the message). Minimum 1 message, maximum 100.',
                 minItems: 1,
                 maxItems: 100,
                 items: {
@@ -68,20 +95,65 @@ export class ToolHandlers {
                     role: {
                       type: 'string',
                       enum: ['system', 'user', 'assistant'],
-                      description: 'The role of the message sender',
+                      description: 'Indicates the originator of the message. Must be one of: "system", "user", "assistant".',
                     },
                     content: {
                       type: 'string',
-                      description: 'The content of the message',
+                      description: 'The textual content of the message.',
                     },
                   },
                   required: ['role', 'content'],
                 }              },
               temperature: {
                 type: 'number',
-                description: 'Sampling temperature (0-2)',
+                description: '(Optional) Controls the randomness of the generated output. Ranges from 0.0 (deterministic) to 2.0 (highly random). Affects creativity versus coherence.',
                 minimum: 0,
                 maximum: 2,
+              },
+              max_tokens: {
+                  type: 'number',
+                  description: '(Optional) Sets an upper limit on the number of tokens generated in the response. Overrides the server default if specified. Influences provider routing based on model context limits.',
+              },
+              provider: {
+                  type: 'object',
+                  description: '(Optional) An object allowing fine-grained control over how OpenRouter selects the underlying AI provider for this request, overriding any server-level defaults.',
+                properties: {
+                  quantizations: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description: '(Optional) Filters eligible providers to only those supporting the specified quantization levels (e.g., ["fp16", "int8"]). Overrides server default.',
+                  },
+                  ignore: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description: '(Optional) A list of provider IDs (e.g., ["openai", "mistralai"]) to explicitly exclude from consideration for this request. Overrides server default.',
+                  },
+                      // Phase 2 Options
+                  sort: {
+                          type: 'string',
+                          enum: ['price', 'throughput', 'latency'],
+                          description: '(Optional) Determines the primary criterion ("price", "throughput", or "latency") used to sort eligible providers before selection. Overrides server default.',
+                  },
+                  order: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          description: '(Optional) Defines a specific, ordered list of preferred provider IDs. OpenRouter will attempt to use these providers in the given order. Overrides server default.',
+                  },
+                  require_parameters: {
+                          type: 'boolean',
+                          description: '(Optional) If set to true, restricts selection to only those providers that fully support *all* parameters included in this chat completion request. Overrides server default.',
+                  },
+                  data_collection: {
+                          type: 'string',
+                          enum: ['allow', 'deny'],
+                          description: '(Optional) Specifies the user\'s preference regarding data collection by the underlying provider ("allow" or "deny"). Overrides server default.',
+                  },
+                  allow_fallbacks: {
+                          type: 'boolean',
+                          description: '(Optional) If set to true (default), allows OpenRouter to attempt using fallback providers if the initially selected provider(s) fail. Set to false to disable fallbacks. Overrides server default.',
+                      }
+                },
+                  additionalProperties: true // Allow future properties for forward compatibility
               },
             },
             required: ['messages'],
@@ -91,59 +163,59 @@ export class ToolHandlers {
         },
         {
           name: 'search_models',
-          description: 'Search and filter OpenRouter.ai models based on various criteria',
+          description: 'Queries the OpenRouter.ai model registry, filtering by various criteria like capabilities, pricing, or provider. Use this to discover models suitable for specific needs. Returns a list of matching model metadata objects.',
           inputSchema: {
             type: 'object',
             properties: {
               query: {
                 type: 'string',
-                description: 'Optional search query to filter by name, description, or provider',
+                description: '(Optional) A text query string to search within model names, descriptions, and provider details.',
               },
               provider: {
                 type: 'string',
-                description: 'Filter by specific provider (e.g., "anthropic", "openai", "cohere")',
+                description: '(Optional) Restricts the search to models offered by a specific provider ID (e.g., "openai", "anthropic").',
               },
               minContextLength: {
                 type: 'number',
-                description: 'Minimum context length in tokens',
+                description: '(Optional) Filters for models that support at least the specified context window size (in tokens).',
               },
               maxContextLength: {
                 type: 'number',
-                description: 'Maximum context length in tokens',
+                description: '(Optional) Filters for models that support at most the specified context window size (in tokens).',
               },
               maxPromptPrice: {
                 type: 'number',
-                description: 'Maximum price per 1K tokens for prompts',
+                description: '(Optional) Filters for models whose price for processing 1,000 prompt tokens is less than or equal to this value.',
               },
               maxCompletionPrice: {
                 type: 'number',
-                description: 'Maximum price per 1K tokens for completions',
+                description: '(Optional) Filters for models whose price for generating 1,000 completion tokens is less than or equal to this value.',
               },
               capabilities: {
                 type: 'object',
-                description: 'Filter by model capabilities',
+                description: '(Optional) An object specifying required model capabilities.',
                 properties: {
                   functions: {
                     type: 'boolean',
-                    description: 'Requires function calling capability',
+                    description: '(Optional) If true, filters for models that support function calling.',
                   },
                   tools: {
                     type: 'boolean',
-                    description: 'Requires tools capability',
+                    description: '(Optional) If true, filters for models that support tool usage.',
                   },
                   vision: {
                     type: 'boolean',
-                    description: 'Requires vision capability',
+                    description: '(Optional) If true, filters for models that support image input (vision).',
                   },
                   json_mode: {
                     type: 'boolean',
-                    description: 'Requires JSON mode capability',
+                    description: '(Optional) If true, filters for models that support guaranteed JSON output mode.',
                   }
                 }
               },
               limit: {
                 type: 'number',
-                description: 'Maximum number of results to return (default: 10)',
+                description: '(Optional) Limits the number of matching models returned in the response. Must be between 1 and 50. Defaults to 10.',
                 minimum: 1,
                 maximum: 50
               }
@@ -152,13 +224,13 @@ export class ToolHandlers {
         },
         {
           name: 'get_model_info',
-          description: 'Get detailed information about a specific model',
+          description: 'Retrieves the complete metadata for a single OpenRouter.ai model specified by its unique ID. Use this when you know the model ID and need its full details (pricing, context limits, capabilities, etc.). Returns a model information object.',
           inputSchema: {
             type: 'object',
             properties: {
               model: {
                 type: 'string',
-                description: 'The model ID to get information for',
+                description: '(Required) The unique identifier string of the OpenRouter.ai model whose details are being requested.',
               },
             },
             required: ['model'],
@@ -166,13 +238,13 @@ export class ToolHandlers {
         },
         {
           name: 'validate_model',
-          description: 'Check if a model ID is valid',
+          description: 'Verifies if a given model ID exists within the OpenRouter.ai registry. Use this for a quick check of model ID validity before making other API calls. Returns a boolean value (`true` if valid, `false` otherwise).',
           inputSchema: {
             type: 'object',
             properties: {
               model: {
                 type: 'string',
-                description: 'The model ID to validate',
+                description: '(Required) The unique identifier string of the OpenRouter.ai model to check for validity.',
               },
             },
             required: ['model'],
@@ -192,7 +264,19 @@ export class ToolHandlers {
               params: {
                 arguments: request.params.arguments as unknown as ChatCompletionToolRequest
               }
-            }, this.openai, this.defaultModel) as any;
+            },
+            this.openai,
+            this.defaultModel,
+            this.defaultMaxTokens,
+            this.defaultQuantizations,
+            this.defaultIgnoredProviders,
+            // Pass Phase 2 defaults
+            this.defaultProviderSort,
+            this.defaultProviderOrder,
+            this.defaultProviderRequireParameters,
+            this.defaultProviderDataCollection,
+            this.defaultProviderAllowFallbacks
+            ) as any;
           
           case 'search_models':
             // Add 'as any' to satisfy SDK type checker

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [2.3.0] - 2025-06-18
+### Added
+- (provider-routing) Comprehensive provider routing controls for chat_completion tool
+  - max_tokens parameter to filter providers by output capacity
+  - Provider filtering by quantizations and ignore lists
+  - Provider sorting by price, throughput, or latency
+  - Explicit provider preference using order
+  - Model suffix shortcuts (:nitro, :floor)
+  - Environment variables for default routing behavior
+
 ## [2.2.0] - 2025-03-27
 ### Added
 - Unified ToolResult response format for all tool handlers
@@ -93,6 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Update license to Apache 2.0
 
+[Unreleased]: https://github.com/mcpservers/openrouterai/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/mcpservers/openrouterai/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/mcpservers/openrouterai/compare/v2.1.0...v2.2.0
 [2.0.2]: https://github.com/mcpservers/openrouterai/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/mcpservers/openrouterai/compare/v2.0.0...v2.0.1
