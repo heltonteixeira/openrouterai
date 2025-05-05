@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/heltonteixeira-openrouterai-badge.png)](https://mseep.ai/app/heltonteixeira-openrouterai)
+
 # OpenRouter MCP Server
 
 [![MCP Server](https://img.shields.io/badge/MCP-Server-green)](https://github.com/heltonteixeira/openrouterai)
