@@ -5,7 +5,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
 ## [2.3.0] - 2025-06-18
 ### Added
 - (provider-routing) Comprehensive provider routing controls for chat_completion tool
@@ -15,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Explicit provider preference using order
   - Model suffix shortcuts (:nitro, :floor)
   - Environment variables for default routing behavior
+
+### Changed
+- Updated descriptions for `chat_completion`, `get_model_info`, and `validate_model` tools for improved clarity and detail.
 
 ## [2.2.0] - 2025-03-27
 ### Added
